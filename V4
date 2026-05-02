@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Granny-like V5</title>
+<style>
+body { margin:0; overflow:hidden; background:black; }
+#ui {
+ position:absolute;
+ bottom:10px;
+ left:10px;
+ color:white;
+}
+.btn {
+ position:absolute;
+ bottom:20px;
+ right:20px;
+ padding:15px;
+ background:rgba(255,255,255,0.2);
+}
+</style>
+</head>
+<body>
+
+<div id="ui">Inventaire: <span id="inv">vide</span></div>
+<div class="btn" onclick="interact()">E</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+
+<script>
+let scene=new THREE.Scene();
+scene.fog=new THREE.Fog(0x000000,10,100);
+
+let camera=new THREE.PerspectiveCamera(75,innerWidth/innerHeight,0.1,1000);
+let renderer=new THREE.WebGLRenderer();
+renderer.setSize(innerWidth,innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// lumière lampe
+let light=new THREE.SpotLight(0xffffff,2);
+light.angle=0.5;
+scene.add(light);
+
+// sol
+let floor=new THREE.Mesh(
+ new THREE.BoxGeometry(100,1,100),
+ new THREE.MeshStandardMaterial({color:0x222222})
+);
+floor.position.y=-1;
+scene.add(floor);
+
+// murs + collision
+let walls=[];
+function wall(x,z,w,d){
+ let m=new THREE.Mesh(
+  new THREE.BoxGeometry(w,5,d),
+  new THREE.MeshStandardMaterial({color:0x444444})
+ );
+ m.position.set(x,1.5,z);
+ scene.add(m);
+ walls.push(m);
+}
+
+// maison
+wall(0,-25,50,1);
+wall(0,25,50,1);
+wall(-25,0,1,50);
+wall(25,0,1,50);
+wall(0,0,30,1);
+
+// joueur
+let player=new THREE.Mesh(
+ new THREE.BoxGeometry(1,2,1),
+ new THREE.MeshStandardMaterial({color:0x00ff00})
+);
+scene.add(player);
+
+// inventaire
+let inventory=[];
+
+// objets
+let items=[];
+function item(name,x,z,color){
+ let o=new THREE.Mesh(
+  new THREE.BoxGeometry(0.5,0.5,0.5),
+  new THREE.MeshStandardMaterial({color})
+ );
+ o.position.set(x,0,z);
+ o.userData.name=name;
+ scene.add(o);
+ items.push(o);
+}
+
+item("clé",5,5,0xffff00);
+item("planche",-10,10,0xaa5500);
+
+// porte
+let door=new THREE.Mesh(
+ new THREE.BoxGeometry(2,3,0.5),
+ new THREE.MeshStandardMaterial({color:0x884400})
+);
+door.position.set(0,1,-25);
+scene.add(door);
+
+// ennemi (Granny)
+let enemy=new THREE.Mesh(
+ new THREE.BoxGeometry(1,2,1),
+ new THREE.MeshStandardMaterial({color:0xffffff})
+);
+enemy.position.set(15,0,15);
+scene.add(enemy);
+
+let noise=null;
+let hiding=false;
+
+// contrôles
+let keys={};
+document.addEventListener("keydown",e=>keys[e.key]=true);
+document.addEventListener("keyup",e=>keys[e.key]=false);
+
+// collisions
+function collide(pos){
+ for(let w of walls){
+  if(pos.distanceTo(w.position)<2) return true;
+ }
+ return false;
+}
+
+// mouvement joueur
+function movePlayer(){
+ let speed=0.15;
+ let newPos=player.position.clone();
+
+ if(keys["z"]) newPos.z-=speed;
+ if(keys["s"]) newPos.z+=speed;
+ if(keys["q"]) newPos.x-=speed;
+ if(keys["d"]) newPos.x+=speed;
+
+ if(!collide(newPos)){
+  player.position.copy(newPos);
+  noise=player.position.clone();
+ }
+}
+
+// interaction
+function interact(){
+ // objets
+ items.forEach((o,i)=>{
+  if(player.position.distanceTo(o.position)<2){
+   inventory.push(o.userData.name);
+   scene.remove(o);
+   items.splice(i,1);
+  }
+ });
+
+ // porte
+ if(player.position.distanceTo(door.position)<3){
+  if(inventory.includes("clé")){
+   door.rotation.y=Math.PI/2;
+  }
+ }
+
+ document.getElementById("inv").innerText=inventory.join(", ");
+}
+
+// IA
+function moveEnemy(){
+ let target=null;
+ let dist=enemy.position.distanceTo(player.position);
+
+ if(!hiding && dist<10){
+  target=player.position;
+ } else if(noise){
+  target=noise;
+ } else {
+  target=new THREE.Vector3(0,0,0);
+ }
+
+ let dx=target.x-enemy.position.x;
+ let dz=target.z-enemy.position.z;
+
+ enemy.position.x+=dx*0.02;
+ enemy.position.z+=dz*0.02;
+
+ // rotation vers joueur
+ enemy.lookAt(player.position);
+
+ if(dist<1 && !hiding){
+  gameOver();
+ }
+}
+
+// se cacher (touche C)
+document.addEventListener("keydown",e=>{
+ if(e.key==="c"){
+  hiding=!hiding;
+ }
+});
+
+// game over
+function gameOver(){
+ document.body.innerHTML="<h1 style='color:red;text-align:center;margin-top:40%'>GRANNY T'A EU 😱</h1>";
+}
+
+// caméra + lampe
+function updateCamera(){
+ camera.position.set(player.position.x,3,player.position.z+6);
+ camera.lookAt(player.position);
+
+ light.position.copy(player.position);
+ light.target.position.copy(player.position);
+}
+
+// loop
+function animate(){
+ requestAnimationFrame(animate);
+
+ movePlayer();
+ moveEnemy();
+ updateCamera();
+
+ renderer.render(scene,camera);
+}
+animate();
+</script>
+
+</body>
+</html>
